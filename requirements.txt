@@ -1,0 +1,12 @@
+# FactoryScheduler 執行依賴（封閉網路安裝方式見 README.md）
+PySide6==6.7.2        # GUI
+pandas==2.2.2         # 讀取訂單/主檔
+openpyxl==3.1.5       # 讀寫 .xlsx（輸出介面格式）
+xlrd==2.0.1           # 讀取舊版 .xls（Legacy 訂單/抽件）
+
+# 打包用（目標機器不需要）
+pyinstaller==6.10.0
+
+# 選用：目前時間軸排程用貪婪演算法，不需 ortools。
+# 若未來要升級為 CP-SAT 最佳化再安裝。
+# ortools==9.10.4067

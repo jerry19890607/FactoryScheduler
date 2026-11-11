@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工單自動排程系統 — 進度說明</title>
+<style>
+  :root{
+    --blue:#2b5fa5; --blue-dark:#1f4677; --accent:#4472C4;
+    --bg:#f5f7fa; --card:#ffffff; --line:#e2e8f0; --text:#1f2933; --muted:#64748b;
+    --ok:#1b8a5a; --warn:#c77700; --pull:#F8CBAD;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:40px 16px; background:var(--bg); color:var(--text);
+    font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",Arial,sans-serif;
+    line-height:1.7; font-size:15px;
+  }
+  .wrap{max-width:900px; margin:0 auto;}
+  header{
+    background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+    color:#fff; padding:28px 32px; border-radius:14px 14px 0 0;
+  }
+  header h1{margin:0 0 8px; font-size:26px;}
+  header p{margin:2px 0; font-size:13px; opacity:.92;}
+  .status-badge{
+    display:inline-block; margin-top:12px; background:rgba(255,255,255,.18);
+    padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600;
+  }
+  main{background:var(--card); padding:8px 32px 32px; border-radius:0 0 14px 14px;
+    box-shadow:0 8px 30px rgba(31,70,119,.08);}
+  section{padding:22px 0; border-bottom:1px solid var(--line);}
+  section:last-child{border-bottom:none;}
+  h2{color:var(--blue-dark); font-size:19px; margin:0 0 14px;
+     display:flex; align-items:center; gap:10px;}
+  h2 .num{background:var(--accent); color:#fff; width:28px; height:28px;
+     border-radius:7px; display:inline-flex; align-items:center; justify-content:center;
+     font-size:15px; flex:none;}
+  h3{color:var(--blue); font-size:15px; margin:18px 0 6px;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:14px;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left;}
+  th{background:var(--accent); color:#fff; font-weight:600;}
+  tbody tr:nth-child(even){background:#f8fafc;}
+  ul{margin:8px 0; padding-left:22px;}
+  li{margin:4px 0;}
+  .ok{color:var(--ok); font-weight:700;}
+  .warn{color:var(--warn); font-weight:700;}
+  .pill{display:inline-block; padding:1px 9px; border-radius:999px; font-size:12px; font-weight:600;}
+  .pill.done{background:#e3f6ec; color:var(--ok);}
+  .pill.todo{background:#fff2dd; color:var(--warn);}
+  .callout{background:#eef3fb; border-left:4px solid var(--accent);
+     padding:14px 18px; border-radius:0 8px 8px 0; margin:10px 0; color:var(--blue-dark);}
+  code{background:#eef1f5; padding:1px 6px; border-radius:4px; font-size:13px;
+     font-family:Consolas,"Courier New",monospace; color:#b3285f; word-break:break-all;}
+  .metrics{display:flex; flex-wrap:wrap; gap:14px; margin:14px 0;}
+  .metric{flex:1; min-width:150px; background:#f8fafc; border:1px solid var(--line);
+     border-radius:10px; padding:16px; text-align:center;}
+  .metric .v{font-size:26px; font-weight:800; color:var(--blue-dark);}
+  .metric .v.good{color:var(--ok);}
+  .metric .l{font-size:13px; color:var(--muted); margin-top:4px;}
+  .cols{word-break:break-all; font-size:13px;}
+  footer{text-align:center; color:var(--muted); font-size:12px; margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>工單自動排程系統 — 進度說明</h1>
+    <p>依據文件：說明.txt、介面 format.xlsx、Factory_Scheduling_Schema_V4_3.2.xlsx</p>
+    <p>現況：核心排程引擎（M1–M6）已完成，並以真實資料實跑驗證通過。</p>
+    <span class="status-badge">● 核心引擎完成　|　GUI 串接進行中</span>
+  </header>
+
+  <main>
+    <!-- 1 -->
+    <section>
+      <h2><span class="num">1</span>需求理解</h2>
+      <p>目標：把每天來自不同系統的工單，自動分配到「做得到且最快做完」的機台，產生每台機台的作業時序表。<strong>只排製程 1（機台）</strong>。</p>
+      <h3>三類輸入</h3>
+      <ul>
+        <li><strong>主檔</strong>：機台能力、客戶交期規則、產品轉譯、機台排空行事曆。</li>
+        <li><strong>日常訂單</strong>：Legacy（舊系統 <code>.xls</code> / <code>.txt</code>）、APS（新系統 <code>.xlsx</code>）。</li>
+        <li><strong>抽件（Pull）</strong>：把指定卡片提前、優先製作，分 EMER_1 / EMER_2 / Std 三個急迫等級。</li>
+      </ul>
+      <h3>核心規則</h3>
+      <ul>
+        <li>一張工單（PACKAGE_ID）為不可分割的基本任務。</li>
+        <li>四段轉譯：客戶別名 → 產品代號 → 替代版面 → 產品群組 / 必備模組 → 合格機台。</li>
+        <li>交期：最早開始 =（到檔日 ＋ 客戶開始時間）；最晚完成 =（承諾日 ＋ SLA 規則）。</li>
+        <li>抽件拆成「抽件批（提前優先）」與「剩餘批（保留原交期）」。</li>
+        <li>已開工 / 已完成 / Leader 鎖定的任務「凍結」，重排時不可更動。</li>
+        <li>機台有排空時段（Machine_Calendar），排程要避開。</li>
+      </ul>
+      <h3>使用角色</h3>
+      <ul>
+        <li><strong>Leader</strong>：調整排程結果、歷史查詢。</li>
+        <li><strong>OP</strong>：掃 barcode 多選、整包更新為完成。</li>
+      </ul>
+    </section>
+
+    <!-- 2 -->
+    <section>
+      <h2><span class="num">2</span>已實作（核心引擎 M1–M6）</h2>
+      <table>
+        <thead><tr><th style="width:120px">模組</th><th>內容</th><th style="width:90px">狀態</th></tr></thead>
+        <tbody>
+          <tr><td>M1 主檔層</td><td>讀取機台能力、行事曆、客戶交期、產品轉譯兩張表</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M2 訂單載入 + 四段轉譯</td><td>Legacy/APS 多來源載入，翻成機台需求與整包任務</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M3 交期規則引擎</td><td>最早開始 / 最晚完成（含 SLA_REF 代碼規則、全形符號相容）</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M4 抽件載入與拆分</td><td>抽件批 / 剩餘批，含前置時間</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M5 時間軸排程</td><td>時間前推貪婪排程，避開停機、凍結既有任務</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M6 介面輸出 + Barcode + CLI</td><td>每台機台一張時序表、barcode 掃描轉換、全流程指令</td><td><span class="pill done">完成</span></td></tr>
+          <tr><td>M7 GUI 串接</td><td>Leader 時序視圖、OP 掃描多選完成</td><td><span class="pill todo">待進行</span></td></tr>
+        </tbody>
+      </table>
+      <h3>技術選型與部署</h3>
+      <ul>
+        <li>Python ＋ pandas / openpyxl（Excel 讀寫）、OR-Tools（最佳化備援）、PySide6（GUI）、PyInstaller（打包 Windows <code>.exe</code>）、SQLite（狀態保存）。</li>
+        <li>部署目標：<strong>Windows 封閉網路</strong>，交付為可執行檔，含使用者介面。</li>
+      </ul>
+    </section>
+
+    <!-- 3 -->
+    <section>
+      <h2><span class="num">3</span>排程邏輯</h2>
+      <div class="callout">
+        把各來源訂單翻成機台需求 → 算出每張工單的「最早能開工 / 最晚要完成」 → 抽件優先拆出來 →
+        在時間軸上，逐一把每個任務塞進「做得到且做完最早」的機台，並自動避開停機時段。
+      </div>
+      <ul>
+        <li><strong>排序優先序</strong>：抽件 / 優先 → 交期最緊（EDD）→ 片數大的先。</li>
+        <li><strong>加工時間</strong> = 片數 ÷ 該產品群組在該機台的 UPH（片 / 小時）。</li>
+        <li><strong>凍結任務</strong>先固定於原機台，其餘才做指派。</li>
+      </ul>
+    </section>
+
+    <!-- 4 -->
+    <section>
+      <h2><span class="num">4</span>初步產出（真實資料實跑）</h2>
+      <h3>輸入規模</h3>
+      <ul>
+        <li>主檔：機台 15、產品 102、客戶 1</li>
+        <li>訂單：Legacy 87 包、APS 4 包</li>
+        <li>抽件：Legacy 2 事件、APS 5 事件</li>
+      </ul>
+      <div class="metrics">
+        <div class="metric"><div class="v">158.3<span style="font-size:14px"> 分</span></div><div class="l">makespan（總完工）</div></div>
+        <div class="metric"><div class="v warn">17</div><div class="l">逾期任務數</div></div>
+        <div class="metric"><div class="v good">0</div><div class="l">未分配任務</div></div>
+        <div class="metric"><div class="v good">0</div><div class="l">無法轉譯產品</div></div>
+      </div>
+      <h3>輸出檔：<code>Output/排程結果_介面format.xlsx</code></h3>
+      <ul>
+        <li>每台機台一張分頁，欄位對齊「介面 format.xlsx」：</li>
+      </ul>
+      <p class="cols"><code>選擇 / 優先順序 / CUSTOMER_NAME / WORKORDER_ID / PACKAGE_ID / PACKAGE_ID Qty / PULL EMER_1 Qty / PULL EMER_2 Qty / PULL Std Qty / ARRIVER_DATE / PROMISE_DATE / 開始日期時間 / 結束日期時間 / Total time (Min)</code></p>
+      <ul>
+        <li>抽件批數量放到對應急迫等級欄並標色。</li>
+        <li>另有「摘要」頁列出整體指標與未分配清單。</li>
+      </ul>
+    </section>
+
+    <!-- 5 -->
+    <section>
+      <h2><span class="num">5</span>尚待確認 / 下一步</h2>
+      <ul>
+        <li><strong>GUI（M7）</strong>：Leader 每機台時序視圖、OP 掃 barcode 多選整包完成（引擎已就緒，待接介面）。</li>
+        <li>速率（UPH）與機台行事曆以目前主檔為準，正式上線前再以實際資料覆核。</li>
+      </ul>
+      <h3>已依 feedback 確認並實作</h3>
+      <ul>
+        <li><strong>Barcode 截斷</strong>：<code>W_271B4A-1 → 271B4A</code>；若僅 <code>3783C4</code> 則直接使用 <code>3783C4</code>。✔</li>
+        <li><strong>介面列呈現</strong>：抽件以<strong>整包一列</strong>呈現各等級抽件數量。✔</li>
+        <li><strong>抽件單位</strong>：每筆抽件 = 單一張卡（非整筆包含）。✔</li>
+        <li><strong>抽件去重</strong>：以 <code>ID</code> ＋ <code>FILE_NAME</code> 判斷是否已匯入（檔案會疊加）。✔</li>
+      </ul>
+    </section>
+  </main>
+  <footer>工單自動排程系統進度說明　|　核心引擎 M1–M6 已完成並通過真實資料驗證</footer>
+</div>
+</body>
+</html>

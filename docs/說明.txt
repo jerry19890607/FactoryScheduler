@@ -1,0 +1,92 @@
+• 依據檔案:
+    ◦ Factory_Scheduling_Schema_V4_3_1.xlsx(主檔)
+    ◦ Schedule_Legacy_20261106_1215_d5e1cb.xls、Schedule_APS_20261106_1210_0cacbd.xlsx(日常訂單)
+    ◦ Legacy_Pull_20261106_1100_1.txt、APS_Pull_20261106_1440.xls(抽件)
+    ◦ FactoryScheduler.ini(設定檔)
+
+
+
+• 只排製程 1(機台)
+• 兩種日常訂單來源:Legacy(舊系統)、Legacy(文字檔)、APS(新系統)
+• 兩種抽件來源:Legacy_Pull(文字檔)、APS_Pull(.xls)
+• 客戶別名、SLA_REF 結束時間規則
+• 機台排空時段(Machine_Calendar)
+• 抽件單獨所需時間、抽件批與剩餘批
+• OP 可以多選直接完成工單
+• Leader 調整排程結果、歷史查詢
+
+
+
+訂單行:日常訂單檔的一列,即一個工單加一個產品,是排程的基本單位
+標準客戶名:Customer_Deadline 的 CUSTOMER_NAME 別名清單的第一個(例:CTBC)
+最早開始:訂單可以開始製卡的時間
+最晚完成:訂單必須完成的時間
+抽件:把指定的卡片提前、優先製作
+抽件事件:一張工單加上一個抽件檔(實體檔案)
+抽件批:抽件事件產生的作業,有自己的交期與前置時間
+剩餘批:抽件後工單剩下的張數,保留原交期
+任務:排程的單位:一般任務、抽件批、剩餘批
+凍結:重排時不可更動的任務(已開工,完成或 Leader 鎖定)
+
+
+處理流程
+日常:  檔案出現 → 等檔案穩定 → 讀取 → 正規化 → 規則計算 → 排程 → 驗證 → 發佈
+抽件:  檔案出現 → 等檔案穩定 → 讀取 → 比對訂單 → 套用抽件規則 → 鎖定已開工與 Leader 調整
+       → 限時重排 → 驗證 → 發佈新版本 → 寫 Pull_Log
+
+設定檔 FactoryScheduler.ini
+區段.鍵:說明
+Paths.MasterDataPath:主檔完整路徑
+Paths.DailyOrderFolder:日常訂單監控資料夾,匯入完成的移到Archive
+Paths.PullOrderFolder:抽件監控資料夾,匯入完成的移到Archive
+Paths.OutputFolder:排程結果輸出資料夾
+Paths.LogFolder:Log 資料夾
+TriggerSettings.PullTriggerTimes:抽件檢查時間點,逗號分隔(例 09:30,10:30,11:30,14:40,15:30)
+TriggerSettings.EnableFolderWatcher:1 = 啟用即時監控,0 = 只依時間點
+TriggerSettings.FileReadRetryCount、FileReadRetryDelayMs:讀檔重試次數與間隔
+
+
+
+
+4.4 Customer_Deadline
+欄位(標題開頭):型別:規則
+CUSTOMER_NAME:文字:別名清單,以直線符號分隔,第一個是標準名稱
+Start Time:時間:客戶可開始製卡的時間,例 8:30
+Pull_Setup_Min:整數(分):抽件需要時間,可能是文字(例 '3'),需解析
+PULL EMER_1:時間:抽件等級 1 的結束時間
+PULL EMER_2:時間:抽件等級 2 的結束時間
+PULL Std:時間:抽件標準結束時間
+SLA Std:時間:一般訂單的標準結束時間
+SLA_REF:文字:代碼與結束時間清單,見下方語法
+
+
+CUSTOMER_NAME 範例:  CTBC|CTCTW
+SLA_REF 範例:        3D=11:00|D00=11:00
+語法:   清單 = 項目 { | 項目 }     項目 = 代碼 = 時間(H:mm 或 HH:mm)
+• 別名比對:去除空白、不分大小寫,也接受全形直線與等號。同一別名出現在兩列為錯誤。
+• 時間欄位可能是文字或真正的時間值,兩者都要支援。
+• SLA_REF 代碼不分大小寫,必須完整相等(D0 不等於 D00)。
+• PULL_TIME 的值直接對應標題:PULL EMER_1、PULL EMER_2、PULL Std。
+
+
+4.5 Product_Master(訂單轉譯主檔)
+欄位(標題開頭):型別:規則
+CUSTOMER_NAME:文字:標準客戶名
+產品代號:文字:必須以文字讀取,保留前導 0(例 040000322)。部分儲存格是數字型別,轉成文字時不可出現科學記號或小數
+產品描述:文字僅顯示
+替代版面:實際用的產品
+
+Product_Setup (生產途程主檔)
+
+產品群組:文字:例 ECC、IPASS、ICASH;空白 = 無群組。用於相近產品排在一起,
+必備模組1 至 9:文字機台必須具備;空白略過;同一產品重複的模組只算一次
+這張表的作用是：定義機台模組。注意！這裡的主鍵(Key) 必須是表一的 實際生產/替代版面。
+只要卡片的物理製程一樣（都過 DUG），在這邊就只要建一筆資料，不用因為訂單代號不同而重複建檔。
+
+
+
+介面掃描
+
+1.Barcode scan 需要轉換格式 ,掃描的 format  W_271B4A-1 ,只能取271B4,如果有PACKAGE_ID (PJ057337)
+全部狀態更新完成
+2.使用者可以多個勾選PJ057337,PJ057338全部更新狀態完成

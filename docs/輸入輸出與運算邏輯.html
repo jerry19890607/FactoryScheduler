@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FactoryScheduler — 輸入資料 / 輸出資料 / 運算邏輯</title>
+<style>
+  :root{
+    --blue:#2b5fa5; --blue-dark:#1f4677; --accent:#4472C4;
+    --bg:#f5f7fa; --card:#ffffff; --line:#e2e8f0; --text:#1f2933; --muted:#64748b;
+    --ok:#1b8a5a; --warn:#c77700; --code:#b3285f; --pull:#F8CBAD;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:40px 16px; background:var(--bg); color:var(--text);
+    font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",Arial,sans-serif;
+    line-height:1.7; font-size:15px;
+  }
+  .wrap{max-width:940px; margin:0 auto;}
+  header{
+    background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+    color:#fff; padding:28px 32px; border-radius:14px 14px 0 0;
+  }
+  header h1{margin:0 0 8px; font-size:25px;}
+  header p{margin:2px 0; font-size:13px; opacity:.92;}
+  main{background:var(--card); padding:8px 32px 32px; border-radius:0 0 14px 14px;
+    box-shadow:0 8px 30px rgba(31,70,119,.08);}
+  section{padding:22px 0; border-bottom:1px solid var(--line);}
+  section:last-child{border-bottom:none;}
+  h2{color:var(--blue-dark); font-size:20px; margin:0 0 14px;
+     display:flex; align-items:center; gap:10px;}
+  h2 .num{background:var(--accent); color:#fff; width:30px; height:30px;
+     border-radius:8px; display:inline-flex; align-items:center; justify-content:center;
+     font-size:16px; flex:none;}
+  h3{color:var(--blue); font-size:16px; margin:20px 0 6px;}
+  h4{color:var(--blue-dark); font-size:14px; margin:14px 0 4px;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:14px;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:var(--accent); color:#fff; font-weight:600;}
+  tbody tr:nth-child(even){background:#f8fafc;}
+  ul,ol{margin:8px 0; padding-left:24px;}
+  li{margin:5px 0;}
+  code{background:#eef1f5; padding:1px 6px; border-radius:4px; font-size:13px;
+     font-family:Consolas,"Courier New",monospace; color:var(--code); word-break:break-all;}
+  .callout{background:#eef3fb; border-left:4px solid var(--accent);
+     padding:14px 18px; border-radius:0 8px 8px 0; margin:12px 0; color:var(--blue-dark);}
+  .summary{background:#e3f6ec; border-left:4px solid var(--ok);
+     padding:14px 18px; border-radius:0 8px 8px 0; margin:12px 0; color:#14583c; font-weight:600;}
+  pre{background:#1e293b; color:#e2e8f0; padding:14px 16px; border-radius:8px;
+     overflow-x:auto; font-size:13px; line-height:1.55;
+     font-family:Consolas,"Courier New",monospace;}
+  pre .cmt{color:#8aa0b8;}
+  .cols{word-break:break-all; font-size:13px;}
+  .step{display:flex; gap:12px; align-items:flex-start; margin:8px 0;}
+  .step .n{background:var(--blue); color:#fff; width:26px; height:26px; border-radius:50%;
+     display:inline-flex; align-items:center; justify-content:center; font-size:14px;
+     font-weight:700; flex:none; margin-top:2px;}
+  footer{text-align:center; color:var(--muted); font-size:12px; margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>FactoryScheduler — 輸入資料 / 輸出資料 / 運算邏輯</h1>
+    <p>技術說明：資料流與排程演算法</p>
+    <p>一句話：把各來源訂單翻成機台需求 → 算交期 → 抽件優先拆出 → 在時間軸貪婪指派到最快做完的合格機台，並避開停機時段。</p>
+  </header>
+
+  <main>
+    <!-- 一、輸入 -->
+    <section>
+      <h2><span class="num">一</span>輸入資料（三類）</h2>
+
+      <h3>1. 主檔 <code>Factory_Scheduling_Schema_V4_3.2.xlsx</code>（<code>--master</code>）</h3>
+      <p>「不常變」的基礎資料，一個 Excel 內含 5 個分頁：</p>
+      <table>
+        <thead><tr><th style="width:150px">分頁</th><th>內容</th><th style="width:150px">用途</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Machine_Info</strong></td><td>15 台機台：各群組 UPH（Wave / ECC / IPass / ICASH 片/小時）、模組 1~9、製程階段</td><td>機台能做什麼、速率多少</td></tr>
+          <tr><td><strong>Machine_Calendar</strong></td><td>機台排空時段（例 MX_1 在 11/10 09:00–11:00 停機）</td><td>排程要「挖空」的時間</td></tr>
+          <tr><td><strong>Customer_Deadline</strong></td><td>客戶別名（CTBC｜CTCTW）、開始時間 8:30、抽件前置 3 分、各級抽件截止、SLA Std、SLA_REF 規則</td><td>算交期用</td></tr>
+          <tr><td><strong>Product_Master</strong></td><td>102 筆：(客戶, 產品代號) → 替代版面</td><td>轉譯第一步</td></tr>
+          <tr><td><strong>Product_Setup</strong></td><td>102 筆：(客戶, 替代版面) → 產品群組 ＋ 必備模組</td><td>轉譯第二步</td></tr>
+        </tbody>
+      </table>
+
+      <h3>2. 日常訂單（<code>--orders</code>，可多檔）</h3>
+      <p>一天的工單，兩種來源：</p>
+      <ul>
+        <li><strong>Legacy</strong>：舊系統，<code>.xls</code> 或 <code>.txt</code>（以 <code>|</code> 分隔）</li>
+        <li><strong>APS</strong>：新系統，<code>.xlsx</code>（資料常在非第一分頁，程式會自動掃描）</li>
+      </ul>
+      <p>每一列 = <strong>一個訂單行</strong>（一張工單＋一個產品），關鍵欄位：
+        <code>CUSTOMER_NAME</code>、<code>WORKORDER_ID</code>、<code>PACKAGE_ID</code>、<code>PRODUCT_REF</code>、<code>QTY</code>、
+        <code>ARRIVER_DATE</code>(到檔)、<code>PROMISE_DATE</code>(承諾)、<code>SLA_REF</code>、<code>SLA</code>。</p>
+      <p>目前實跑：Legacy 87 包 ＋ APS 4 包。</p>
+
+      <h3>3. 抽件 Pull（<code>--pulls</code>，可多檔）</h3>
+      <p>「把某張工單的某些卡片<strong>提前優先做</strong>」的指令。Legacy 文字檔、APS <code>.xls</code>。
+        欄位：<code>WORKORDER_ID</code>、<code>PACKAGE_ID</code>、<code>PULL_TYPE</code>(EMER_1 / EMER_2 / Std)、<code>PULL_TIME</code>、<code>STATUS</code>。</p>
+    </section>
+
+    <!-- 二、輸出 -->
+    <section>
+      <h2><span class="num">二</span>輸出資料 <code>排程結果_介面format.xlsx</code>（<code>--out</code>）</h2>
+      <p><strong>每台機台一張分頁</strong>，欄位對齊「介面 format.xlsx」：</p>
+      <p class="cols"><code>選擇 / 優先順序 / CUSTOMER_NAME / WORKORDER_ID / PACKAGE_ID / PACKAGE_ID Qty / PULL EMER_1 Qty / PULL EMER_2 Qty / PULL Std Qty / ARRIVER_DATE / PROMISE_DATE / 開始日期時間 / 結束日期時間 / Total time (Min)</code></p>
+      <p>每一列 = 一個排程任務：</p>
+      <ul>
+        <li><strong>優先順序</strong> = 在該機台的第幾個做</li>
+        <li><strong>PACKAGE_ID Qty</strong> = 一般任務的片數；若是抽件批，片數改放到對應的 <code>PULL EMER_1/2/Std Qty</code> 欄並上色</li>
+        <li><strong>開始 / 結束日期時間</strong> = 算出的實際時鐘時間（已避開停機時段）</li>
+        <li><strong>Total time (Min)</strong> = setup ＋ 加工分鐘</li>
+        <li>外加一張 <strong>摘要</strong>頁：排程起點、makespan、逾期數、未分配數</li>
+      </ul>
+    </section>
+
+    <!-- 三、邏輯 -->
+    <section>
+      <h2><span class="num">三</span>運算邏輯（四段轉譯 → 交期 → 抽件 → 排程）</h2>
+
+      <h3>步驟 1：四段轉譯（把「訂單」翻成「機台能懂的需求」）</h3>
+      <div class="step"><span class="n">1</span><div>客戶別名 → 標準客戶名（CTCTW → CTBC）</div></div>
+      <div class="step"><span class="n">2</span><div>(客戶, 產品代號) → 替代版面（Product_Master）</div></div>
+      <div class="step"><span class="n">3</span><div>(客戶, 替代版面) → 產品群組 ＋ 必備模組（Product_Setup）</div></div>
+      <div class="step"><span class="n">4</span><div>必備模組 → 哪些機台「做得到」（模組涵蓋 ＋ 該群組 UPH&gt;0）</div></div>
+
+      <h3>步驟 2：交期規則</h3>
+      <ul>
+        <li><strong>最早開始</strong> = 到檔日 <code>ARRIVER_DATE</code> ＋ 客戶「Start Time」(8:30)</li>
+        <li><strong>最晚完成</strong> = 承諾日 <code>PROMISE_DATE</code> ＋（<code>SLA_REF</code> 代碼命中的時間，否則 <code>SLA Std</code>，否則 23:59）</li>
+      </ul>
+
+      <h3>步驟 3：抽件（單一筆抽件模型）</h3>
+      <ul>
+        <li>每一筆抽件 = <strong>單一張卡</strong>（並非整筆工單 / 整包），歸到所屬整包（先比 PACKAGE_ID，再比 WORKORDER_ID 所屬包）。</li>
+        <li>整包<strong>仍為一個不可拆分任務</strong>；抽件只是把整包變急：累計各等級數量（EMER_1 / EMER_2 / Std）、標為優先、交期收緊為最緊等級時間、加客戶 Pull_Setup_Min 前置。</li>
+        <li>介面以<strong>整包一列</strong>呈現，各等級抽件數量放到對應欄並標色。</li>
+        <li>去重：抽件檔會持續疊加，以 <code>ID</code> ＋ <code>FILE_NAME</code> 為鍵，已匯入過者略過。</li>
+      </ul>
+
+      <h3>步驟 4：時間軸排程（貪婪，時間前推）</h3>
+      <pre><span class="cmt"># 時間前推的貪婪清單排程，同時決定「指派機台」與「時鐘時間」</span>
+排序：  抽件/優先 → 交期(EDD) → 數量大者先
+指派：  每個任務選「完工時間最早」的合格機台
+        （已考慮機台目前可用時間、最早開始、Machine_Calendar 挖空、抽件 setup）
+凍結：  狀態為處理中/已完成或已釘選者先固定排在該機台</pre>
+      <ul>
+        <li><strong>排序</strong>：抽件 / 優先 → 交期最緊（EDD）→ 數量大的先</li>
+        <li><strong>凍結</strong>：已開工 / 已完成 / Leader 鎖定的任務先固定在原機台</li>
+        <li><strong>指派</strong>：每個任務挑「做完最早」的合格機台，加工時間 = 片數 ÷ 該群組 UPH，遇到機台停機時段會自動跳過順延</li>
+        <li><strong>指標</strong>：目前 makespan 158.3 分、逾期 17、未分配 0</li>
+      </ul>
+
+      <div class="summary">
+        一句話總結：把各來源訂單翻成機台需求 → 算出每張工單的最早能開工 / 最晚要完成 → 抽件優先拆出來 →
+        在時間軸上貪婪地把每個任務塞進最快做完、且做得到的機台，同時避開停機時段。
+      </div>
+    </section>
+  </main>
+  <footer>FactoryScheduler 技術說明　|　輸入資料 / 輸出資料 / 運算邏輯</footer>
+</div>
+</body>
+</html>
