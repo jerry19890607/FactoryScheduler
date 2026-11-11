@@ -1,0 +1,24 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- 虛擬環境（開發用，不隨程式交付）----
+.venv/
+venv/
+
+# ---- 打包產物 ----
+build/
+dist/
+*.spec
+
+# ---- 執行時狀態 / 產物（會自動重建，不入庫）----
+factory_state.db
+scheduler_state.db
+settings.json
+FactoryScheduler/Logs/*.json
+FactoryScheduler/Output/*.xlsx
+
+# ---- 作業系統雜項 ----
+.DS_Store
+Thumbs.db
